@@ -13,13 +13,22 @@ import scala.concurrent.Future
 case class S3Key(bucket: String, content: String)
 case class S3FileRawData(contents: Seq[ByteString])
 
-class S3Gets extends BulkkaTemplate[Seq[S3Key], S3Key, S3FileRawData, Seq[S3FileRawData]]
+class S3Gets extends BulkkaTemplate[(String, String), S3Key, S3FileRawData, Seq[S3FileRawData]]
   with MixinImplBulkkaS3 {
-    override def toTaked(in: Seq[S3Key]): Source[S3Key, NotUsed] =
-      Source.fromIterator(() => in.toIterator)
+    override def toTaked(in: (String, String)): Source[S3Key, NotUsed] = {
+      val (bucket, bucketKey) = in
+      val keysF = impl.keys(bucket, bucketKey)
+      val srcF = Source.future(keysF)
+      srcF.flatMapConcat(seq => Source.fromIterator(() => seq.toIterator))
+    }
 
-    override def toTakedFuture(inF: Future[Seq[S3Key]]): Source[S3Key, NotUsed] = {
-      val srcF = Source.future(inF)
+    override def toTakedFuture(inF: Future[(String, String)]): Source[S3Key, NotUsed] = {
+      val keysF = (for {
+        (bucket, bucketKey) <- inF
+      } yield impl.keys(bucket, bucketKey))
+        .flatMap(f => f)
+
+      val srcF = Source.future(keysF)
       srcF.flatMapConcat(seq => Source.fromIterator(() => seq.toIterator))
     }
 
@@ -67,9 +76,9 @@ class ImplBulkkaS3 {
 
 class BulkkaEngineS3 {
   lazy val engine: BulkkaEngine = BulkkaEngine
-  def runGraphGets(inOpt: Option[Seq[S3Key]], inFOpt: Option[Future[Seq[S3Key]]]): Future[Seq[S3FileRawData]] = {
+  def runGraphGets(inOpt: Option[(String, String)], inFOpt: Option[Future[(String, String)]]): Future[Seq[S3FileRawData]] = {
     engine.runGraph[
-      Seq[S3Key],
+      (String, String),
       S3Key,
       S3FileRawData,
       Seq[S3FileRawData],
