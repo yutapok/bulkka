@@ -1,6 +1,7 @@
 package bulkka.api
 
 import akka.NotUsed
+
 import akka.stream.scaladsl._
 
 import scala.concurrent.Future
@@ -29,6 +30,7 @@ class BulkkaEngine {
     }
     graph.run()
   }
+
 }
 
 object BulkkaEngine extends BulkkaEngine
