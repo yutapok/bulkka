@@ -1,0 +1,3 @@
+[submodule "s-jdf"]
+	path = s-jdf
+	url = https://github.com/yutapok/s-jdf.git
