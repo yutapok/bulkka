@@ -11,13 +11,16 @@ import akka.stream.alpakka.s3._
 import akka.stream.alpakka.s3.scaladsl.S3
 import akka.stream.alpakka.s3.ObjectMetadata
 
+import com.typesafe.scalalogging.LazyLogging
+
 import scala.concurrent.Future
+import scala.util._
 
 
 case class S3Key(bucket: String, content: String)
 case class S3FileRawData(contents: Iterator[ByteString])
 
-class AwsS3 {
+class AwsS3 extends LazyLogging {
   lazy val PROCESSORS = Runtime.getRuntime.availableProcessors
   def bulkConcatDownload(bucket: String, bucketKey: String): Source[Iterator[ByteString], NotUsed] = {
 
@@ -46,28 +49,28 @@ class AwsS3 {
     }
       .mapMaterializedValue(_ => NotUsed)
 
-  def bulkMultiUpload(bucket: String): Sink[(String, ByteString), Future[Done]] = {
-    Sink.fromMaterializer { (mat, attr) =>
+  def bulkMultiUpload(bucket: String): Flow[(String, ByteString), MultipartUploadResult, NotUsed] = {
+    Flow.fromMaterializer { (mat, attr) =>
       implicit val system: ActorSystem = mat.system
       implicit val materializer: Materializer = mat
       import mat.executionContext
 
       Flow[(String, ByteString)]
-        .map{ case((keyStr, contents)) => (S3Key(bucket, keyStr), contents) }
-        .map{ case((s3key, contents)) => upload(s3key, contents)(mat, attr) }
-        .to(Sink.ignore)
+        .mapAsyncUnordered[MultipartUploadResult](PROCESSORS)(
+          upDataTup => upload(S3Key(bucket, upDataTup._1), upDataTup._2)(mat, attr)
+        )
     }
-      .mapMaterializedValue(_ => Future.successful(Done))
+      .mapMaterializedValue(_ => NotUsed)
   }
 
-  def keyFromFileFlow[T <: BaseFile]: Flow[T, (String, ByteString), NotUsed] = {
+  def fromFileKeyFlow[T <: FileKey]: Flow[T, (String, ByteString), NotUsed] = {
     Flow.fromMaterializer { (mat, attr) =>
       implicit val system: ActorSystem = mat.system
       implicit val materializer: Materializer = mat
       import mat.executionContext
 
       Flow[T]
-        .map(file => (file.key.toName, file.read))
+        .map(fkey => (fkey.toName, fkey.read))
     }
       .mapMaterializedValue(_ => NotUsed)
   }

@@ -24,15 +24,22 @@ object ImplFile {
 case class FileKey(name: String, ext: String){
   def toTmpPath = Paths.get(ImplFile.pathTmpStr(name, ext))
   def toName = s"""${name}.${ext}"""
+  def read: ByteString = {
+    val linesStr = scala.io.Source
+      .fromFile(toTmpPath.toString)
+      .getLines
+      .mkString("\n")
+
+    ByteString(linesStr)
+  }
 }
 
 trait BaseFile {
     def write: Unit
-    def read: ByteString
     def key: FileKey
 }
 
-case class CsvHeeader(columns: Seq[String]){
+case class CsvHeader(columns: Seq[String]){
     def toCsvString: String = columns.mkString(",")
 }
 
@@ -40,7 +47,7 @@ case class CsvBody(rows: Iterator[Seq[String]]) {
     def toCsvString: String = rows.map(seq => seq.mkString(",")).mkString("\n")
 }
 
-case class Csv(header: CsvHeeader, body: CsvBody, keyname: String) extends BaseFile {
+case class Csv(header: CsvHeader, body: CsvBody, keyname: String) extends BaseFile {
     override def write: Unit = {
       val tmpPath = ImplFile.pathTmpStr(keyname, "csv")
       val path = Paths.get(tmpPath)
@@ -57,21 +64,23 @@ case class Csv(header: CsvHeeader, body: CsvBody, keyname: String) extends BaseF
 
     }
 
-    override def read: ByteString = {
-        val linesStr = scala.io.Source
-          .fromFile(key.toTmpPath.toString)
-          .getLines
-          .mkString("\n")
-
-        ByteString(linesStr)
-    }
-
-
     override def key: FileKey = new FileKey(keyname, "csv")
 }
 
 class File {
-  def writelnDistributedFlow[T <: BaseFile](t: T): Flow[T, FileKey, NotUsed] = {
+  def toTextFlow: Flow[Iterator[String], Iterator[String], NotUsed] = {
+    Flow.fromMaterializer{ (mat, attr) =>
+      implicit val system: ActorSystem = mat.system
+      implicit val materializer: Materializer = mat
+      import mat.executionContext
+
+      Flow[Iterator[String]]
+        .map(itr => itr.flatMap(_.split("\n").toIterator))
+    }
+      .mapMaterializedValue(_ => NotUsed)
+  }
+
+  def writelnDistributedFlow[T <: BaseFile]: Flow[T, FileKey, NotUsed] = {
     Flow.fromMaterializer{ (mat, attr) =>
       implicit val system: ActorSystem = mat.system
       implicit val materializer: Materializer = mat

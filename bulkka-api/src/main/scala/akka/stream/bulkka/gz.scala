@@ -15,7 +15,7 @@ import java.util.zip._
 
 
 class Gz {
-  def DecompressionFlow: Flow[Iterator[ByteString], Iterator[String], NotUsed] =
+  def decompressionFlow: Flow[Iterator[ByteString], Iterator[String], NotUsed] =
     Flow.fromMaterializer { (mat, attr) =>
       implicit val system: ActorSystem = mat.system
       implicit val materializer: Materializer = mat
