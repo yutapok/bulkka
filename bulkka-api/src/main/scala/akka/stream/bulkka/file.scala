@@ -40,11 +40,11 @@ trait BaseFile {
 }
 
 case class CsvHeader(columns: Seq[String]){
-    def toCsvString: String = columns.mkString(",")
+    def toCsvString: String = s"""${columns.mkString(",")}\n"""
 }
 
 case class CsvBody(rows: Iterator[Seq[String]]) {
-    def toCsvString: String = rows.map(seq => seq.mkString(",")).mkString("\n")
+    def toCsvString: String = s"""${rows.map(seq => seq.mkString(",")).mkString("\n")}\n"""
 }
 
 case class Csv(header: CsvHeader, body: CsvBody, keyname: String) extends BaseFile {
@@ -107,9 +107,9 @@ class File {
           items.sortBy(fk => (fk.name, fk.ext)).distinct
         )
 
-    }
-      .mapMaterializedValue(_ => NotUsed)
   }
+    .mapMaterializedValue(_ => NotUsed)
+}
 }
 
 object File extends File
