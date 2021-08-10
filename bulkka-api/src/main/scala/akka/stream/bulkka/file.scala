@@ -51,10 +51,10 @@ case class Csv(header: CsvHeader, body: CsvBody, keyname: String) extends BaseFi
     override def write: Unit = {
       val tmpPath = ImplFile.pathTmpStr(keyname, "csv")
       val path = Paths.get(tmpPath)
-      val fileExist = Files.notExists(path)
+      val nonFileExist = Files.notExists(path)
 
       val writer = new PrintWriter(new BufferedWriter(new FileWriter(path.toFile, true)))
-      if (fileExist){
+      if (nonFileExist){
         writer.write(header.toCsvString)
       }
 
