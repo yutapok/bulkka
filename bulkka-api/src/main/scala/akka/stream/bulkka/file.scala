@@ -13,9 +13,8 @@ import akka.stream.alpakka.s3.ObjectMetadata
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-import java.io.{BufferedWriter, FileWriter, PrintWriter}
-import java.nio.file.{Files, Paths}
-
+import java.nio.file._
+import java.nio.file.Paths
 
 object ImplFile {
   def pathTmpStr(s: String, ext: String) =  s"""/tmp/${s}.${ext}"""
@@ -35,36 +34,8 @@ case class FileKey(name: String, ext: String){
 }
 
 trait BaseFile {
-    def write: Unit
+    def write(mode: StandardOpenOption): Unit
     def key: FileKey
-}
-
-case class CsvHeader(columns: Seq[String]){
-    def toCsvString: String = s"""${columns.mkString(",")}\n"""
-}
-
-case class CsvBody(rows: Iterator[Seq[String]]) {
-    def toCsvString: String = s"""${rows.map(seq => seq.mkString(",")).mkString("\n")}\n"""
-}
-
-case class Csv(header: CsvHeader, body: CsvBody, keyname: String) extends BaseFile {
-    override def write: Unit = {
-      val tmpPath = ImplFile.pathTmpStr(keyname, "csv")
-      val path = Paths.get(tmpPath)
-      val nonFileExist = Files.notExists(path)
-
-      val writer = new PrintWriter(new BufferedWriter(new FileWriter(path.toFile, true)))
-      if (nonFileExist){
-        writer.write(header.toCsvString)
-      }
-
-      writer.write(body.toCsvString)
-
-      writer.close
-
-    }
-
-    override def key: FileKey = new FileKey(keyname, "csv")
 }
 
 class File {
@@ -87,7 +58,7 @@ class File {
       import mat.executionContext
 
       Flow[T]
-        .map(bf => (bf.key, bf.write))
+        .map(bf => (bf.key, bf.write(StandardOpenOption.APPEND)))
         .via(writelnCompletedAtWindowFlow)
     }
       .mapMaterializedValue(_ => NotUsed)
@@ -104,12 +75,27 @@ class File {
         .map{case(fk, _) => fk}
         .groupedWithin(100, 1.seconds)
         .mapConcat(items =>
-          items.sortBy(fk => (fk.name, fk.ext)).distinct
+          items
+            .sortBy(fk => (Option(fk.name), Option(fk.ext)))
+            .distinct
         )
 
-  }
+    }
     .mapMaterializedValue(_ => NotUsed)
-}
+  }
+
+  def fromFileKeyFlow[T <: FileKey]: Flow[T, (String, ByteString), NotUsed] = {
+    Flow.fromMaterializer { (mat, attr) =>
+      implicit val system: ActorSystem = mat.system
+      implicit val materializer: Materializer = mat
+      import mat.executionContext
+
+      Flow[T]
+        .map(fkey => (fkey.toName, fkey.read))
+    }
+      .mapMaterializedValue(_ => NotUsed)
+  }
+
 }
 
 object File extends File

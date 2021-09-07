@@ -63,18 +63,6 @@ class AwsS3 extends LazyLogging {
       .mapMaterializedValue(_ => NotUsed)
   }
 
-  def fromFileKeyFlow[T <: FileKey]: Flow[T, (String, ByteString), NotUsed] = {
-    Flow.fromMaterializer { (mat, attr) =>
-      implicit val system: ActorSystem = mat.system
-      implicit val materializer: Materializer = mat
-      import mat.executionContext
-
-      Flow[T]
-        .map(fkey => (fkey.toName, fkey.read))
-    }
-      .mapMaterializedValue(_ => NotUsed)
-  }
-
   private def fetchRawDataFlow: Flow[S3Key, S3FileRawData, NotUsed] =
     Flow.fromMaterializer { (mat, attr) =>
       implicit val system: ActorSystem = mat.system
